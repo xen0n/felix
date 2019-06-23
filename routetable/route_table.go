@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 
 	"github.com/projectcalico/felix/conntrack"
 	"github.com/projectcalico/felix/ifacemonitor"
@@ -799,6 +800,13 @@ func (r *RouteTable) fullResyncRoutesForLink(logCxt *log.Entry, ifaceName string
 	leaveDirty := false
 	for _, route := range programmedRoutes {
 		logCxt.Debugf("Processing route: %v %v %v", route.Table, route.LinkIndex, route.Dst)
+		if route.Type == unix.RTN_LOCAL {
+			// Ignore local routes in case we're syncing IPv6 routes on a kernel built without
+			// CONFIG_IPV6_MULTIPLE_TABLES, where the local routes are intermingled with
+			// the ones we really care about.
+			logCxt.Debug("Syncing routes: ignoring local route.")
+			continue
+		}
 		var dest ip.CIDR
 		if route.Dst != nil {
 			dest = ip.CIDRFromIPNet(route.Dst)
